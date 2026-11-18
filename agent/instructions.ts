@@ -1,7 +1,11 @@
 import { defineInstructions } from "eve/instructions";
 
 /**
- * Computer's full system prompt, resolved once at build time.
+ * The Eve app's copy of Computer's system prompt, resolved once at build time.
+ *
+ * The prompt of record is `agent/instructions.md` in the private
+ * `wazootech/computer` repository. Change it there first, then mirror the text
+ * here; when the two disagree, that file is the source.
  *
  * @remarks
  * The verified GitHub event supplies the target repository per session. The

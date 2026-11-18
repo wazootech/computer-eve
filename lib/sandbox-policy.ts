@@ -2,7 +2,7 @@
  * Deterministic verification policy for Computer's factory capability:
  * the default check commands per repo class, the repair rule, and the
  * time budgets. Pure and dependency-free so the matrix is directly
- * testable, mirroring lib/discord-policy.ts.
+ * testable.
  *
  * Source of the defaults: the wazoo-factory decision record, carried
  * through computer#10. The executor runs these inside the pinned
