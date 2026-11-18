@@ -2,6 +2,8 @@
 
 Computer is Wazoo's general assistant for the whole team, and it adopts the official Eve software-factory pattern for engineering work while keeping Wazoo-specific identity, credentials, and memory boundaries. The factory described below covers Computer's engineering path, not the whole of its job.
 
+This repository (`wazootech/computer-eve`) is Computer's Eve runtime: the authenticated web chat and the GitHub factory on Vercel. Computer's persona, its prompt of record (`agent/instructions.md`), and its Discord channel live in the private `wazootech/computer` repository. `agent/instructions.ts` here is the copy the Eve app compiles in; when the two disagree, `wazootech/computer` is the source.
+
 ## Runtime
 
 The root agent is an orchestrator. It delegates every work item through structured stations:
@@ -18,7 +20,7 @@ The result is a draft pull request. Merge and ready-for-review actions are inten
 
 - `agent/channels/github.ts` handles authorized mentions, `factory`-label intake, CI-failure follow-up, and PR summaries.
 - Failure comments are policy-controlled. `lib/failure-policy.ts` decides what a channel may say when a turn or session fails: a **deployment fault** (an unusable credential, an unpaid gateway account, or a model the account cannot reach) posts nothing, because only an operator can clear it, and every other failure posts one generic sentence that never carries the upstream provider's text. eve's built-in handler echoes that text verbatim, which is how a revoked key repeated `Model provider API error: Authentication Fails, Your api key: ****53a6...` into the originating thread on every dispatch.
-- `channels/discord/index.ts` owns ordinary `@Computer` mentions in the internal Discord channel: it holds the Gateway connection, admits each mention, asks Computer's brain, and posts the reply. The brain is a Zo persona reached over `/zo/ask`, so this path runs no model of its own. `lib/discord-mention-policy.ts` decides admission and `lib/discord-policy.ts` resolves the tier; admission is default-deny and fail-closed: an allowlisted guild, plus either an allowlisted channel or — with `DISCORD_INTERNAL_GUILD_WIDE` — an allowlisted operator role, plus an explicit bot mention with a non-empty prompt.
+- Discord is not part of this app. Computer's `@Computer` Discord channel, its admission policy, and its Zo deploy tooling live in the private `wazootech/computer` repository (Computer's persona repository), where a Zo persona answers mentions over `/zo/ask`.
 - `agent/extensions/github.ts` mounts the official GitHub tools with an explicit allowlist and the WazooComputer GitHub App installation token.
 - `agent/subagents/` contains isolated station prompts, sandboxes, and handoff tools.
 - `agent/skills/` contains load-on-demand triage, writing, and tracker-bridging procedures.

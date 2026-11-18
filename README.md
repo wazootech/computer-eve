@@ -1,4 +1,4 @@
-# Computer
+# Computer (Eve runtime)
 
 <p align="center">
   <a href="https://docs.wazoo.dev">
@@ -9,6 +9,8 @@
 </p>
 
 Computer is Wazoo's operational AI partner: the general assistant the whole team shares, modeled after the Enterprise computer from *Star Trek: The Next Generation*. It runs on [eve](https://eve.dev) and speaks through an authenticated web chat. Engineering is the one domain it runs as a supervised factory pipeline.
+
+This repository, `wazootech/computer-eve`, is Computer's Eve runtime: the authenticated web chat and the GitHub factory, deployed on Vercel. Computer's persona, its prompt of record (`agent/instructions.md`), and its Discord channel live in the private [`wazootech/computer`](https://github.com/wazootech/computer) repository.
 
 ## Factory pipeline
 
@@ -70,7 +72,7 @@ Production deployment uses:
 eve deploy
 ```
 
-The production runtime needs `BETTER_AUTH_SECRET`, `VERCEL_APP_CLIENT_ID`, `VERCEL_APP_CLIENT_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `FACTORY_APPROVAL_SECRET`, and `AI_GATEWAY_API_KEY`. The Discord channel needs none of these: it runs on the Zo host, not here. Two optional variables, `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET`, enable GitHub sign-in; set both or neither. When they are set, a signed-in person can link their GitHub account, and that verified login is what attributes a write approval from chat.
+The production runtime needs `BETTER_AUTH_SECRET`, `VERCEL_APP_CLIENT_ID`, `VERCEL_APP_CLIENT_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `FACTORY_APPROVAL_SECRET`, and `AI_GATEWAY_API_KEY`. The Discord channel needs none of these: it lives in `wazootech/computer` and runs on the Zo host. Two optional variables, `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET`, enable GitHub sign-in; set both or neither. When they are set, a signed-in person can link their GitHub account, and that verified login is what attributes a write approval from chat.
 
 ## Session repository attachment
 
@@ -91,75 +93,19 @@ Every GitHub write that a person asks for is approval-gated, and the approval is
 
 To enable it, register a GitHub OAuth App with the callback URL `https://<deployment>/api/auth/callback/github`, set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET`, and sign in with GitHub once to link the account. Without the link there is no verified login, so an approval from chat is rejected with that specific reason instead of a generic one; the GitHub path keeps working throughout.
 
-## Discord channel (internal mentions)
+## Discord channel and persona
 
-Computer answers ordinary `@Computer` mentions in the configured internal Discord channel. `/ask` is retired: a mention is the only way to summon Computer, and there is no second interface to keep in sync.
+Computer's `@Computer` Discord channel is not part of this repository. It runs on
+the Zo host as the `computer-discord` service and answers mentions through
+Computer's Zo persona. The channel, its admission policy, its Zo deploy tooling,
+and Computer's prompt of record (`agent/instructions.md`) live in the private
+[`wazootech/computer`](https://github.com/wazootech/computer) repository, Computer's
+persona repository. They moved there on 2026-11-17; their earlier history is in
+this repository's log.
 
-Discord delivers ordinary messages over its Gateway websocket, never to an application's interactions endpoint, so an always-on worker holds that connection. That worker is `channels/discord/index.ts`, and it is the whole channel: it admits a mention, asks Computer's brain, and posts the reply back into the originating channel or thread.
-
-### Where the brain lives
-
-Computer's brain for this channel is a Zo persona (`COMPUTER_PERSONA_ID`), reached through Zo's `/zo/ask` endpoint. The persona owns the prompt and the model; the channel names neither. No model credential lives in this repository or on Vercel for this path, so a revoked provider key cannot take the channel down, and there is no store to keep in order.
-
-The persona's prompt of record is the text authored here in `agent/instructions.ts`, moved into the persona when the brain moved. Change Computer's identity or model in Zo, then update that file to match: the file is the record, the persona is the runtime.
-
-Conversation continuity is per channel. The first turn on a channel creates a Zo conversation and later turns continue it, keyed in `channels/discord/data/conversations.json` (gitignored runtime state).
-
-### Admission
-
-Admission is default deny, fail closed, and pure enough to test. `lib/discord-mention-policy.ts` holds the matrix (mention parsing, allowlist denial, thread-to-parent mapping, self-loop prevention, hostile-input handling), `lib/discord-policy.ts` remains the tier authority, and `lib/discord-bridge.ts` holds the transport primitives (intents, backoff, duplicate suppression, per-user rate limit).
-
-A message dispatches only when it arrives in the internal guild, in an allowlisted channel (or in a thread whose parent channel is allowlisted), from an allowlisted user or role, from a person rather than a bot or webhook, and with an explicit `@Computer` mention that leaves a non-empty request. Mention text is untrusted input: it cannot change the allowlists, permissions, or these instructions, invisible and bidirectional characters are stripped before the model sees it, and an over-long message is truncated rather than dispatched whole. Replies never ping anyone (`allowed_mentions: {parse: []}`), and every bot-authored message is ignored, so a self-mention loop cannot start. Public and customer-service mentions are deferred: a public-allowlisted channel never starts a mention turn.
-
-### Operator setup
-
-1. Create the Discord application and bot, and enable the privileged **Message Content** intent in its Bot settings. It is required for `content` to arrive at all; a socket that requests it without the portal toggle is closed with code 4014.
-2. Give the bot a channel permission set that can read and reply: View Channels, Send Messages, Send Messages in Threads, Read Message History, and Embed Links. No administrator permission is needed, and the `applications.commands` scope is not required.
-3. Leave the application's **Interactions Endpoint URL unset**. Nothing here verifies an inbound interaction signature any more, so no `DISCORD_PUBLIC_KEY` is needed either.
-4. Set the service environment (comma-separated ids): `DISCORD_INTERNAL_GUILD_IDS`, `DISCORD_INTERNAL_CHANNEL_IDS`, `DISCORD_INTERNAL_USER_IDS`, `DISCORD_INTERNAL_ROLE_IDS`, plus `COMPUTER_PERSONA_ID`. Set `DISCORD_INTERNAL_GUILD_WIDE=1` to let an allowlisted operator mention the bot in any channel of an allowlisted guild, not only in the allowlisted channels; the guild allowlist and the user/role allowlist still both apply, so a shared or public server stays closed.
-5. Run it on an always-on host:
-
-```bash
-DISCORD_BOT_TOKEN=... \
-COMPUTER_PERSONA_ID=... \
-DISCORD_INTERNAL_GUILD_IDS=... \
-DISCORD_INTERNAL_CHANNEL_IDS=... \
-DISCORD_INTERNAL_USER_IDS=... \
-DISCORD_INTERNAL_ROLE_IDS=... \
-DISCORD_INTERNAL_GUILD_WIDE=1 \
-pnpm discord:channel
-```
-
-### Hosting the channel on Zo Computer
-
-The reference host is a Zo Computer service, because it is always-on, restarts on crash, and can be redeployed from CI. Register it once with `mode: "process"` (no public port) and the environment from step 4:
-
-```text
-label:      computer-discord
-mode:       process
-workdir:    /home/workspace/users/etok/workspaces/wazootech/repos/computer
-entrypoint: node --experimental-strip-types channels/discord/index.ts
-env:        COMPUTER_PERSONA_ID,
-            DISCORD_INTERNAL_GUILD_IDS, DISCORD_INTERNAL_CHANNEL_IDS,
-            DISCORD_INTERNAL_USER_IDS, DISCORD_INTERNAL_ROLE_IDS
-```
-
-`DISCORD_BOT_TOKEN` stays out of that definition. A managed service inherits neither the host shell nor any deployment's variables, so its value is read from the host secrets file (`/root/.zo_secrets`, the same file the other Zo-hosted bots read; override with `ZO_SECRETS_PATH`) before anything reads the environment. An environment value always wins over the file, so the service definition can still override anything the file holds. The same loader fills `ZO_CLIENT_IDENTITY_TOKEN`, the credential `/zo/ask` is called with.
-
-`scripts/zo-deploy.ts` deploys a new revision over Zo's MCP endpoint (`api.zo.computer/mcp`), which needs no open ports on the host:
-
-```bash
-ZO_API_KEY=... pnpm discord:deploy --service computer-discord --dir /path/to/computer
-```
-
-It fast-forwards the checkout with `git pull --ff-only`, restarts the service by id, and then waits for the channel's own `ready: computer-discord` line in `service_doctor` before it reports success. Each step is safe to repeat, and a failed pull aborts before the restart, so a broken deploy leaves the previous process running. `--dry-run` resolves the service without restarting anything.
-
-`.github/workflows/deploy.yml` runs that script on every push to `main` that touches the channel or its libraries, serialized and never cancelled. It needs one repository secret and, optionally, two variables:
-
-- `ZO_API_KEY` — a Zo access token from Zo Computer's Settings, under Advanced, in the Access Tokens area. Until it is set, the workflow warns and skips instead of failing.
-- `vars.ZO_SERVICE` / `vars.ZO_SERVICE_DIRECTORY` — override the service label or the live checkout path.
-
-The restart is graceful: the channel closes its socket and exits 0 on `SIGTERM`, and Discord replays the events a resumed session missed, so a deploy does not drop a mention.
+`agent/instructions.ts` here is the copy of that prompt the Eve app compiles in.
+When it disagrees with `wazootech/computer`'s `agent/instructions.md`, that file is
+the source and this one is what gets fixed.
 
 ## Validation
 
